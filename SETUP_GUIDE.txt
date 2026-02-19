@@ -1,0 +1,202 @@
+============================================================
+  OutreachPro - Email Outreach Automation
+  Complete Setup Guide for Windows
+============================================================
+
+CONTENTS
+--------
+  1. Requirements
+  2. Installation Steps
+  3. Email Setup (Gmail)
+  4. Google Sheets Setup (optional)
+  5. Daily Use
+  6. Troubleshooting
+
+
+------------------------------------------------------------
+1. REQUIREMENTS
+------------------------------------------------------------
+
+  - Windows 10 or 11
+  - Node.js (free download - see Step 1 below)
+  - A Gmail account (or any SMTP email account)
+  - Internet connection for first-time setup
+
+
+------------------------------------------------------------
+2. INSTALLATION STEPS
+------------------------------------------------------------
+
+  STEP 1 - Install Node.js (one time only)
+  -----------------------------------------
+  a) Open your browser and go to:
+       https://nodejs.org
+  b) Click the big green "LTS" download button
+  c) Run the installer - click Next through all screens
+  d) Restart your computer after it finishes
+
+  STEP 2 - Install OutreachPro
+  -----------------------------
+  a) Unzip the OutreachPro folder somewhere on your computer
+     (e.g. C:\Users\YourName\OutreachPro)
+  b) Double-click  INSTALL.bat
+  c) Wait for it to finish (takes 1-2 minutes the first time)
+  d) Notepad will open the .env file - see Section 3 below
+
+  STEP 3 - Create a Desktop Shortcut (optional)
+  -----------------------------------------------
+  Double-click  CREATE_SHORTCUT.bat
+  An "OutreachPro" icon will appear on your Desktop.
+
+
+------------------------------------------------------------
+3. EMAIL SETUP (GMAIL)
+------------------------------------------------------------
+
+You need a Gmail "App Password" - this is NOT your normal
+Gmail password. It is a special 16-character code that lets
+OutreachPro send emails on your behalf.
+
+  How to get a Gmail App Password:
+  ----------------------------------
+  1. Go to: https://myaccount.google.com/security
+  2. Make sure "2-Step Verification" is turned ON
+     (if not, click it and follow the steps to enable it)
+  3. Go to: https://myaccount.google.com/apppasswords
+  4. In the "App name" box type: OutreachPro
+  5. Click "Create"
+  6. Google shows a 16-character password like: abcd efgh ijkl mnop
+     COPY this password (you won't see it again)
+
+  Now put it in your .env file:
+  --------------------------------
+  Open the .env file in Notepad (double-click it).
+  Find these two lines and fill them in:
+
+    EMAIL_USER=yourname@gmail.com
+    EMAIL_APP_PASSWORD=abcd efgh ijkl mnop
+
+    EMAIL_FROM_NAME=Your Name
+
+  Save and close Notepad.
+
+  That's it for email! You can test the connection on the
+  Settings page inside the app.
+
+
+------------------------------------------------------------
+4. GOOGLE SHEETS SETUP (OPTIONAL)
+------------------------------------------------------------
+
+This lets you sync all your client data to a Google
+Spreadsheet automatically. Skip this if you don't need it
+(you can always use the Excel download instead).
+
+  Step A - Create a Google Cloud Project
+  ----------------------------------------
+  1. Go to: https://console.cloud.google.com
+  2. Click "New Project" - name it anything e.g. OutreachPro
+  3. With your project selected, go to "APIs & Services"
+  4. Click "Enable APIs and Services"
+  5. Search for "Google Sheets API" and enable it
+
+  Step B - Create a Service Account
+  -----------------------------------
+  1. Go to "APIs & Services" > "Credentials"
+  2. Click "Create Credentials" > "Service Account"
+  3. Name it e.g. outreachpro-sync, click Done
+  4. Click the service account you just created
+  5. Go to the "Keys" tab > "Add Key" > "Create new key"
+  6. Choose JSON and click Create - a file downloads
+
+  Step C - Create your Google Sheet
+  ------------------------------------
+  1. Go to sheets.google.com and create a new spreadsheet
+  2. Rename the first tab (bottom) to:  Outreach Tracker
+  3. Copy the Sheet ID from the URL:
+       https://docs.google.com/spreadsheets/d/ [THIS PART] /edit
+  4. Click "Share" and share the sheet with the service
+     account email (looks like: name@project.iam.gserviceaccount.com)
+     Give it "Editor" access
+
+  Step D - Fill in .env
+  ----------------------
+  Open the downloaded JSON key file in Notepad.
+  Copy the values into your .env file:
+
+    GOOGLE_SERVICE_ACCOUNT_EMAIL=  (the "client_email" value)
+    GOOGLE_PRIVATE_KEY=            (the "private_key" value - include
+                                    the -----BEGIN PRIVATE KEY----- part)
+    GOOGLE_SHEET_ID=               (from Step C)
+
+  Then use "Sync Google Sheets" button in the app or on the
+  Settings page.
+
+
+------------------------------------------------------------
+5. DAILY USE
+------------------------------------------------------------
+
+  Starting the app:
+    Double-click  START.bat  (or the Desktop shortcut)
+    Your browser opens automatically at http://localhost:3000
+
+  Stopping the app:
+    Double-click  STOP.bat
+    Or just close the "OutreachPro Server" taskbar window
+
+  Workflow:
+    1. Go to Clients - add clients manually or import a CSV
+    2. Go to Compose - select clients, pick a template, click
+       "Add to Review Queue"
+    3. Go to Review Queue - read each email, edit if needed,
+       then click "Approve & Send"
+    4. Follow-ups are auto-scheduled and appear in the queue
+       when due - they also need your approval before sending
+    5. Go to History - download Excel or sync to Google Sheets
+
+  CSV Import format (create in Excel and save as CSV):
+    name, email, company, phone, notes, tags
+    Jane Smith, jane@acme.com, Acme Corp, 07700000000, -, saas
+
+  Template variables you can use:
+    {{name}}        Full name
+    {{firstName}}   First name only
+    {{company}}     Company name
+    {{email}}       Email address
+    {{phone}}       Phone number
+    {{today}}       Today's date (e.g. 19 February 2026)
+
+
+------------------------------------------------------------
+6. TROUBLESHOOTING
+------------------------------------------------------------
+
+  "Node.js not found"
+    Install Node.js from https://nodejs.org then restart
+    your computer and run INSTALL.bat again.
+
+  "npm install failed"
+    Check your internet connection.
+    Try running INSTALL.bat again.
+
+  Emails not sending / "Authentication failed"
+    Make sure you used an App Password, NOT your real
+    Gmail password. Re-read Section 3 above.
+    Make sure 2-Step Verification is enabled on your
+    Google account.
+
+  App doesn't open in browser
+    Try going to http://localhost:3000 manually.
+    Check server.log in the app folder for error messages.
+
+  Port 3000 already in use
+    Run STOP.bat first, then START.bat again.
+
+  Google Sheets sync fails
+    Check the service account email has Editor access to
+    the sheet. Check your .env values match the JSON key.
+
+------------------------------------------------------------
+  For help visit: https://github.com/anthropics/claude-code
+============================================================
