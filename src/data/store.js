@@ -14,7 +14,11 @@ const DEFAULTS = {
   emails:    [],   // queue items (pending → approved → sent)
   followups: [],
   settings:  {
-    followupDays: [3, 7, 14],
+    followupDays: [
+      parseInt(process.env.FOLLOWUP_1_DAYS || '3',  10),
+      parseInt(process.env.FOLLOWUP_2_DAYS || '7',  10),
+      parseInt(process.env.FOLLOWUP_3_DAYS || '14', 10)
+    ],
     timezone: 'UTC'
   }
 };

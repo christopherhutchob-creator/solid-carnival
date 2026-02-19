@@ -37,7 +37,7 @@ function scheduleFollowUps(sentEmail, client, templates) {
       templateId:      template.id,
       subject:         renderedSubject,
       body:            renderedBody,
-      status:          'pending',          // waits for approval
+      status:          'pending_scheduled', // cron promotes to 'pending' when due
       followUpNumber:  idx + 1,
       previousEmailId: sentEmail.id,
       scheduledFor:    scheduledFor.toISOString(),
