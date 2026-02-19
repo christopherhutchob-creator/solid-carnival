@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Outreach Automation</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- Sidebar navigation -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span class="logo-icon">&#9993;</span>
+      <span class="logo-text">OutreachPro</span>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#dashboard"  class="nav-link active" data-view="dashboard">
+          <span class="nav-icon">&#9641;</span> Dashboard</a></li>
+      <li><a href="#clients"   class="nav-link" data-view="clients">
+          <span class="nav-icon">&#128101;</span> Clients</a></li>
+      <li><a href="#compose"   class="nav-link" data-view="compose">
+          <span class="nav-icon">&#9997;</span> Compose</a></li>
+      <li>
+        <a href="#queue" class="nav-link" data-view="queue">
+          <span class="nav-icon">&#9989;</span> Review Queue
+          <span class="badge" id="queue-badge" style="display:none">0</span>
+        </a>
+      </li>
+      <li><a href="#history"   class="nav-link" data-view="history">
+          <span class="nav-icon">&#128203;</span> History</a></li>
+      <li><a href="#templates" class="nav-link" data-view="templates">
+          <span class="nav-icon">&#128196;</span> Templates</a></li>
+      <li><a href="#settings"  class="nav-link" data-view="settings">
+          <span class="nav-icon">&#9881;</span> Settings</a></li>
+    </ul>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main" id="main">
+
+    <!-- ── DASHBOARD ─────────────────────────────────────────────────── -->
+    <section class="view" id="view-dashboard">
+      <div class="view-header">
+        <h1>Dashboard</h1>
+        <button class="btn btn-primary" onclick="App.refreshDashboard()">Refresh</button>
+      </div>
+      <div class="stat-grid" id="stat-grid">
+        <div class="stat-card"><div class="stat-value" id="stat-clients">—</div><div class="stat-label">Total Clients</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-pending">—</div><div class="stat-label">Pending Review</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-sent">—</div><div class="stat-label">Emails Sent</div></div>
+        <div class="stat-card"><div class="stat-value" id="stat-converted">—</div><div class="stat-label">Converted</div></div>
+      </div>
+      <div class="dash-cols">
+        <div class="panel">
+          <h2 class="panel-title">Pending Review <span class="muted">(needs approval)</span></h2>
+          <div id="dash-pending-list" class="compact-list"></div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">Client Pipeline</h2>
+          <div id="dash-pipeline" class="pipeline-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CLIENTS ────────────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-clients">
+      <div class="view-header">
+        <h1>Clients</h1>
+        <div class="header-actions">
+          <input type="text" id="client-search" class="search-input" placeholder="Search name, email, company..." oninput="App.searchClients(this.value)" />
+          <label class="btn btn-secondary" for="csv-upload">Import CSV</label>
+          <input type="file" id="csv-upload" accept=".csv" style="display:none" onchange="App.importCSV(event)" />
+          <button class="btn btn-primary" onclick="App.openClientModal()">+ Add Client</button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <span class="filter-label">Filter:</span>
+        <button class="filter-btn active" data-status="" onclick="App.filterClients('')">All</button>
+        <button class="filter-btn" data-status="new"            onclick="App.filterClients('new')">New</button>
+        <button class="filter-btn" data-status="contacted"      onclick="App.filterClients('contacted')">Contacted</button>
+        <button class="filter-btn" data-status="responded"      onclick="App.filterClients('responded')">Responded</button>
+        <button class="filter-btn" data-status="interested"     onclick="App.filterClients('interested')">Interested</button>
+        <button class="filter-btn" data-status="converted"      onclick="App.filterClients('converted')">Converted</button>
+        <button class="filter-btn" data-status="not_interested" onclick="App.filterClients('not_interested')">Not Interested</button>
+      </div>
+      <table class="data-table" id="clients-table">
+        <thead><tr>
+          <th><input type="checkbox" id="select-all-clients" onchange="App.toggleSelectAll(this)" /></th>
+          <th>Name</th><th>Email</th><th>Company</th>
+          <th>Status</th><th>Emails Sent</th><th>Last Contacted</th><th>Actions</th>
+        </tr></thead>
+        <tbody id="clients-tbody"></tbody>
+      </table>
+      <div class="bulk-bar" id="bulk-bar" style="display:none">
+        <span id="bulk-count">0 selected</span>
+        <button class="btn btn-primary" onclick="App.bulkCompose()">Compose for Selected</button>
+        <button class="btn btn-danger"  onclick="App.bulkDelete()">Delete Selected</button>
+      </div>
+    </section>
+
+    <!-- ── COMPOSE ────────────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-compose">
+      <div class="view-header">
+        <h1>Compose Emails</h1>
+      </div>
+      <div class="compose-grid">
+        <div class="panel">
+          <h2 class="panel-title">1. Select Clients</h2>
+          <input type="text" class="search-input" placeholder="Search clients..." oninput="App.searchComposeClients(this.value)" />
+          <div id="compose-client-list" class="client-checklist"></div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">2. Choose Template</h2>
+          <select id="compose-template" class="form-input" onchange="App.previewTemplate()">
+            <option value="">— Select a template —</option>
+          </select>
+          <div id="template-preview" class="template-preview hidden">
+            <div class="preview-subject"><strong>Subject:</strong> <span id="preview-subject-text"></span></div>
+            <div class="preview-body" id="preview-body-text"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">3. Options</h2>
+          <label class="checkbox-label">
+            <input type="checkbox" id="compose-followups" checked />
+            Auto-schedule follow-up emails
+          </label>
+          <p class="hint">Follow-ups will appear in your Review Queue on schedule, waiting for your approval before sending.</p>
+          <div class="compose-summary" id="compose-summary"></div>
+          <button class="btn btn-primary btn-full" id="compose-btn" onclick="App.queueEmails()">
+            Add to Review Queue
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── REVIEW QUEUE ───────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-queue">
+      <div class="view-header">
+        <h1>Review Queue</h1>
+        <p class="subtitle">Approve or edit each email before it is sent. Nothing sends without your say-so.</p>
+      </div>
+      <div id="queue-empty" class="empty-state hidden">
+        <p>No emails pending review.</p>
+        <button class="btn btn-primary" onclick="App.showView('compose')">Compose New Emails</button>
+      </div>
+      <div id="queue-list"></div>
+    </section>
+
+    <!-- ── HISTORY ────────────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-history">
+      <div class="view-header">
+        <h1>Sent History</h1>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="App.exportExcel()">Download Excel</button>
+          <button class="btn btn-secondary" onclick="App.syncSheets()">Sync Google Sheets</button>
+        </div>
+      </div>
+      <table class="data-table">
+        <thead><tr>
+          <th>Client</th><th>Subject</th><th>Follow-up #</th><th>Sent At</th><th>Client Status</th>
+        </tr></thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </section>
+
+    <!-- ── TEMPLATES ─────────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-templates">
+      <div class="view-header">
+        <h1>Email Templates</h1>
+        <button class="btn btn-primary" onclick="App.openTemplateModal()">+ New Template</button>
+      </div>
+      <p class="hint">Use <code>&#123;&#123;name&#125;&#125;</code>, <code>&#123;&#123;firstName&#125;&#125;</code>, <code>&#123;&#123;company&#125;&#125;</code>, <code>&#123;&#123;email&#125;&#125;</code>, <code>&#123;&#123;today&#125;&#125;</code> as variables.</p>
+      <div id="templates-grid" class="templates-grid"></div>
+    </section>
+
+    <!-- ── SETTINGS ──────────────────────────────────────────────────── -->
+    <section class="view hidden" id="view-settings">
+      <div class="view-header"><h1>Settings</h1></div>
+      <div class="settings-cols">
+        <div class="panel">
+          <h2 class="panel-title">Email Configuration</h2>
+          <p class="hint">Edit your <code>.env</code> file to set credentials. Click Verify to test the connection.</p>
+          <button class="btn btn-secondary" onclick="App.verifyEmail()">Verify Email Connection</button>
+          <div id="email-verify-result" class="mt-1"></div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">Follow-up Schedule</h2>
+          <p class="hint">Days after initial send to queue each follow-up for review.</p>
+          <label class="form-label">Follow-up #1 (days after send)</label>
+          <input type="number" id="fu-day-1" class="form-input" min="1" max="90" value="3" />
+          <label class="form-label">Follow-up #2 (days after send)</label>
+          <input type="number" id="fu-day-2" class="form-input" min="1" max="90" value="7" />
+          <label class="form-label">Follow-up #3 (days after send)</label>
+          <input type="number" id="fu-day-3" class="form-input" min="1" max="90" value="14" />
+          <button class="btn btn-primary mt-1" onclick="App.saveSettings()">Save Settings</button>
+          <div id="settings-result" class="mt-1"></div>
+        </div>
+        <div class="panel">
+          <h2 class="panel-title">Google Sheets</h2>
+          <p class="hint">Configure <code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code>, <code>GOOGLE_PRIVATE_KEY</code>, and <code>GOOGLE_SHEET_ID</code> in your <code>.env</code> file. Make sure the sheet is shared with the service account email.</p>
+          <button class="btn btn-secondary" onclick="App.syncSheets()">Sync All Clients to Sheet</button>
+          <div id="sheets-result" class="mt-1"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ── MODALS ───────────────────────────────────────────────────────── -->
+
+  <!-- Client modal -->
+  <div class="modal-overlay hidden" id="client-modal-overlay" onclick="App.closeModal('client-modal-overlay')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="client-modal-title">Add Client</h2>
+        <button class="modal-close" onclick="App.closeModal('client-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="client-modal-id" />
+        <label class="form-label">Name <span class="req">*</span></label>
+        <input type="text" id="cm-name" class="form-input" placeholder="Jane Smith" />
+        <label class="form-label">Email <span class="req">*</span></label>
+        <input type="email" id="cm-email" class="form-input" placeholder="jane@example.com" />
+        <label class="form-label">Company</label>
+        <input type="text" id="cm-company" class="form-input" placeholder="Acme Corp" />
+        <label class="form-label">Phone</label>
+        <input type="text" id="cm-phone" class="form-input" placeholder="+44 7700 000000" />
+        <label class="form-label">Tags <span class="muted">(comma separated)</span></label>
+        <input type="text" id="cm-tags" class="form-input" placeholder="saas, b2b, uk" />
+        <label class="form-label">Notes</label>
+        <textarea id="cm-notes" class="form-input" rows="3" placeholder="Any notes..."></textarea>
+        <label class="form-label">Status</label>
+        <select id="cm-status" class="form-input">
+          <option value="new">New</option>
+          <option value="contacted">Contacted</option>
+          <option value="responded">Responded</option>
+          <option value="interested">Interested</option>
+          <option value="converted">Converted</option>
+          <option value="not_interested">Not Interested</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="App.closeModal('client-modal-overlay')">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveClient()">Save Client</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Template modal -->
+  <div class="modal-overlay hidden" id="template-modal-overlay" onclick="App.closeModal('template-modal-overlay')">
+    <div class="modal modal-lg" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="template-modal-title">New Template</h2>
+        <button class="modal-close" onclick="App.closeModal('template-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="template-modal-id" />
+        <label class="form-label">Template Name <span class="req">*</span></label>
+        <input type="text" id="tm-name" class="form-input" placeholder="e.g. Cold Outreach #1" />
+        <label class="form-label">Type</label>
+        <select id="tm-type" class="form-input">
+          <option value="initial">Initial Outreach</option>
+          <option value="followup">Follow-up</option>
+          <option value="custom">Custom</option>
+        </select>
+        <label class="form-label">Subject <span class="req">*</span></label>
+        <input type="text" id="tm-subject" class="form-input" placeholder="Quick question for {{company}}" />
+        <label class="form-label">Body <span class="req">*</span></label>
+        <textarea id="tm-body" class="form-input template-body-input" rows="12" placeholder="Hi {{firstName}},&#10;&#10;..."></textarea>
+        <p class="hint">Variables: <code>{{name}}</code> <code>{{firstName}}</code> <code>{{company}}</code> <code>{{email}}</code> <code>{{phone}}</code> <code>{{today}}</code></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="App.closeModal('template-modal-overlay')">Cancel</button>
+        <button class="btn btn-primary" onclick="App.saveTemplate()">Save Template</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email review/edit modal -->
+  <div class="modal-overlay hidden" id="email-modal-overlay" onclick="App.closeModal('email-modal-overlay')">
+    <div class="modal modal-lg" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Review &amp; Edit Email</h2>
+        <button class="modal-close" onclick="App.closeModal('email-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="email-modal-id" />
+        <div class="email-meta">
+          <span><strong>To:</strong> <span id="em-to"></span></span>
+          <span><strong>Follow-up #:</strong> <span id="em-followup"></span></span>
+        </div>
+        <label class="form-label">Subject</label>
+        <input type="text" id="em-subject" class="form-input" />
+        <label class="form-label">Body</label>
+        <textarea id="em-body" class="form-input template-body-input" rows="14"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost"   onclick="App.closeModal('email-modal-overlay')">Cancel</button>
+        <button class="btn btn-secondary" onclick="App.rejectEmail()">Reject</button>
+        <button class="btn btn-warning"  onclick="App.saveEmailEdits()">Save Edits</button>
+        <button class="btn btn-success"  onclick="App.approveEmail()">Approve &amp; Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
