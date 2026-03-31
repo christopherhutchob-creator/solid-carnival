@@ -76,8 +76,9 @@ const App = {
       case 'compose':    App.loadCompose();       break;
       case 'queue':      App.loadQueue();         break;
       case 'history':    App.loadHistory();       break;
-      case 'templates':  App.loadTemplates();     break;
-      case 'settings':   App.loadSettings();      break;
+      case 'templates':  App.loadTemplates();        break;
+      case 'settings':   App.loadSettings();         break;
+      case 'activity':   Activity.init();            break;
     }
   },
 

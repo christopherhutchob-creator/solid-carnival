@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Email Outreach Automation</title>
+  <title>OutreachPro — Activity Dashboard</title>
   <link rel="stylesheet" href="/css/style.css" />
 </head>
 <body>
@@ -32,6 +32,13 @@
           <span class="nav-icon">&#128196;</span> Templates</a></li>
       <li><a href="#settings"  class="nav-link" data-view="settings">
           <span class="nav-icon">&#9881;</span> Settings</a></li>
+    </ul>
+    <div class="sidebar-divider"></div>
+    <ul class="nav-links">
+      <li><a href="#activity" class="nav-link" data-view="activity">
+          <span class="nav-icon">&#128203;</span> Activity Dashboard
+          <span class="badge act-badge" id="act-badge" style="display:none">0</span>
+        </a></li>
     </ul>
   </nav>
 
@@ -205,6 +212,146 @@
       </div>
     </section>
 
+    <!-- ── ACTIVITY DASHBOARD ───────────────────────────────────────────── -->
+    <section class="view hidden" id="view-activity">
+      <div class="view-header">
+        <h1>Activity Dashboard</h1>
+        <div class="header-actions">
+          <button class="btn btn-secondary" onclick="Activity.refresh()">Refresh</button>
+          <button class="btn btn-primary"   onclick="Activity.openTaskModal()">+ Add Task</button>
+        </div>
+      </div>
+
+      <!-- Integration setup banner -->
+      <div id="act-setup-banner" class="act-setup-banner hidden">
+        <div class="act-setup-inner">
+          <span class="act-setup-icon">&#128279;</span>
+          <div>
+            <strong>Connect your accounts</strong>
+            <p id="act-setup-msg">Link Google (Gmail + Calendar) and configure Twilio WhatsApp to unlock all panels.</p>
+          </div>
+          <div class="act-setup-actions">
+            <button class="btn btn-primary btn-sm" id="act-google-btn" onclick="Activity.connectGoogle()">Connect Google</button>
+            <button class="btn btn-ghost btn-sm"   onclick="Activity.dismissSetup()">Dismiss</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stat-grid act-stat-grid" id="act-stat-grid">
+        <div class="stat-card act-stat">
+          <div class="stat-value" id="act-stat-tasks">—</div>
+          <div class="stat-label">Open Tasks</div>
+        </div>
+        <div class="stat-card act-stat">
+          <div class="stat-value" id="act-stat-unread">—</div>
+          <div class="stat-label">Unread Emails</div>
+        </div>
+        <div class="stat-card act-stat">
+          <div class="stat-value" id="act-stat-events">—</div>
+          <div class="stat-label">Today's Events</div>
+        </div>
+        <div class="stat-card act-stat">
+          <div class="stat-value" id="act-stat-wa">—</div>
+          <div class="stat-label">WA Messages</div>
+        </div>
+      </div>
+
+      <!-- Main 4-panel grid -->
+      <div class="act-grid">
+
+        <!-- Tasks panel -->
+        <div class="panel act-panel" id="act-tasks-panel">
+          <div class="act-panel-header">
+            <h2 class="panel-title">Tasks</h2>
+            <div class="act-panel-actions">
+              <select id="act-task-filter" class="act-filter-sel" onchange="Activity.filterTasks()">
+                <option value="">All</option>
+                <option value="high">High priority</option>
+                <option value="medium">Medium priority</option>
+                <option value="low">Low priority</option>
+              </select>
+            </div>
+          </div>
+          <!-- Quick-add row -->
+          <div class="act-quick-add">
+            <input type="text" id="act-quick-task" class="form-input act-quick-input"
+                   placeholder="Quick add task…" onkeydown="if(event.key==='Enter') Activity.quickAddTask()" />
+            <button class="btn btn-primary btn-sm" onclick="Activity.quickAddTask()">Add</button>
+          </div>
+          <div id="act-tasks-list" class="act-scroll-list"></div>
+        </div>
+
+        <!-- Gmail panel -->
+        <div class="panel act-panel" id="act-email-panel">
+          <div class="act-panel-header">
+            <h2 class="panel-title">Inbox <span class="act-badge-inline" id="act-email-unread-badge"></span></h2>
+            <div class="act-panel-actions">
+              <button class="btn btn-ghost btn-sm" onclick="Activity.loadEmails()">Refresh</button>
+            </div>
+          </div>
+          <div id="act-email-list" class="act-scroll-list">
+            <div class="act-placeholder" id="act-email-placeholder">
+              <span>&#9993;</span>
+              <p>Connect your Google account to see Gmail inbox</p>
+              <button class="btn btn-primary btn-sm" onclick="Activity.connectGoogle()">Connect Google</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Calendar panel -->
+        <div class="panel act-panel" id="act-cal-panel">
+          <div class="act-panel-header">
+            <h2 class="panel-title">Calendar</h2>
+            <div class="act-panel-actions">
+              <select id="act-cal-days" class="act-filter-sel" onchange="Activity.loadCalendar()">
+                <option value="3">Next 3 days</option>
+                <option value="7" selected>Next 7 days</option>
+                <option value="14">Next 14 days</option>
+                <option value="30">Next 30 days</option>
+              </select>
+            </div>
+          </div>
+          <div id="act-cal-list" class="act-scroll-list">
+            <div class="act-placeholder" id="act-cal-placeholder">
+              <span>&#128197;</span>
+              <p>Connect your Google account to see calendar events</p>
+              <button class="btn btn-primary btn-sm" onclick="Activity.connectGoogle()">Connect Google</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- WhatsApp panel -->
+        <div class="panel act-panel" id="act-wa-panel">
+          <div class="act-panel-header">
+            <h2 class="panel-title">WhatsApp</h2>
+            <div class="act-panel-actions">
+              <button class="btn btn-ghost btn-sm" onclick="Activity.openWaSendModal()">Send</button>
+              <button class="btn btn-ghost btn-sm" onclick="Activity.loadWhatsapp()">Refresh</button>
+            </div>
+          </div>
+          <div id="act-wa-list" class="act-scroll-list">
+            <div class="act-placeholder" id="act-wa-placeholder">
+              <span>&#128172;</span>
+              <p>Configure Twilio WhatsApp in your <code>.env</code> to see messages</p>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /.act-grid -->
+
+      <!-- Unified activity feed -->
+      <div class="panel act-feed-panel">
+        <div class="act-panel-header">
+          <h2 class="panel-title">Activity Feed</h2>
+          <button class="btn btn-ghost btn-sm" onclick="Activity.loadFeed()">Refresh</button>
+        </div>
+        <div id="act-feed-list" class="act-feed-list"></div>
+      </div>
+
+    </section>
+    <!-- ── /ACTIVITY DASHBOARD ────────────────────────────────────────────── -->
+
   </main>
 
   <!-- ── MODALS ───────────────────────────────────────────────────────── -->
@@ -307,6 +454,70 @@
   <!-- Toast notification -->
   <div id="toast" class="toast hidden"></div>
 
+  <!-- ── Task modal ────────────────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="task-modal-overlay" onclick="App.closeModal('task-modal-overlay')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2 id="task-modal-title">Add Task</h2>
+        <button class="modal-close" onclick="App.closeModal('task-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="task-modal-id" />
+        <label class="form-label">Title <span class="req">*</span></label>
+        <input type="text" id="tm-task-title" class="form-input" placeholder="What needs to be done?" />
+        <label class="form-label">Description</label>
+        <textarea id="tm-task-desc" class="form-input" rows="3" placeholder="Optional details..."></textarea>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div>
+            <label class="form-label">Priority</label>
+            <select id="tm-task-priority" class="form-input">
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+          <div>
+            <label class="form-label">Category</label>
+            <select id="tm-task-category" class="form-input">
+              <option value="general" selected>General</option>
+              <option value="email">Email</option>
+              <option value="calendar">Calendar</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </div>
+        </div>
+        <label class="form-label">Due Date</label>
+        <input type="date" id="tm-task-due" class="form-input" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="App.closeModal('task-modal-overlay')">Cancel</button>
+        <button class="btn btn-primary" onclick="Activity.saveTask()">Save Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── WhatsApp send modal ───────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="wa-send-modal-overlay" onclick="App.closeModal('wa-send-modal-overlay')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Send WhatsApp Message</h2>
+        <button class="modal-close" onclick="App.closeModal('wa-send-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">To (phone number) <span class="req">*</span></label>
+        <input type="text" id="wa-send-to" class="form-input" placeholder="+447700000000" />
+        <p class="hint">Include country code, e.g. +44 for UK. The recipient must have WhatsApp.</p>
+        <label class="form-label">Message <span class="req">*</span></label>
+        <textarea id="wa-send-body" class="form-input" rows="5" placeholder="Your message..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost"    onclick="App.closeModal('wa-send-modal-overlay')">Cancel</button>
+        <button class="btn btn-success"  onclick="Activity.sendWhatsapp()">Send</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/app.js"></script>
+  <script src="/js/activity.js"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 node_modules/
 uploads/
 src/data/db.json
+src/data/google_token.json
 .env
 *.log

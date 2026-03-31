@@ -9,6 +9,7 @@ const clientRoutes   = require('./src/routes/clients');
 const templateRoutes = require('./src/routes/templates');
 const emailRoutes    = require('./src/routes/emails');
 const sheetsRoutes   = require('./src/routes/sheets');
+const activityRoutes = require('./src/routes/activity');
 const { startFollowUpCron } = require('./src/services/followUpService');
 
 // Ensure required directories exist
@@ -30,6 +31,7 @@ app.use('/api/clients',   clientRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/emails',    emailRoutes);
 app.use('/api/sheets',    sheetsRoutes);
+app.use('/api/activity',  activityRoutes);
 
 // Email verify endpoint
 app.get('/api/verify-email', async (req, res) => {

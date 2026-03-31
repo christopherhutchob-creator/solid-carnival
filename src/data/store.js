@@ -9,10 +9,12 @@ const path = require('path');
 const DB_PATH = path.join(__dirname, 'db.json');
 
 const DEFAULTS = {
-  clients:   [],
-  templates: [],
-  emails:    [],   // queue items (pending → approved → sent)
-  followups: [],
+  clients:          [],
+  templates:        [],
+  emails:           [],   // queue items (pending → approved → sent)
+  followups:        [],
+  tasks:            [],   // activity dashboard tasks
+  whatsappMessages: [],   // incoming WhatsApp webhook messages
   settings:  {
     followupDays: [
       parseInt(process.env.FOLLOWUP_1_DAYS || '3',  10),
@@ -43,11 +45,13 @@ function save(db) {
 function getStore() {
   const data = load();
   return {
-    get clients()   { return load().clients;   },
-    get templates() { return load().templates; },
-    get emails()    { return load().emails;    },
-    get followups() { return load().followups; },
-    get settings()  { return load().settings;  },
+    get clients()          { return load().clients;          },
+    get templates()        { return load().templates;        },
+    get emails()           { return load().emails;           },
+    get followups()        { return load().followups;        },
+    get tasks()            { return load().tasks || [];      },
+    get whatsappMessages() { return load().whatsappMessages || []; },
+    get settings()         { return load().settings;         },
 
     save(patch) {
       const current = load();
