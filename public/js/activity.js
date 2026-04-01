@@ -1,28 +1,27 @@
 /* ─────────────────────────────────────────────────────────────────────────
- * Activity Dashboard — Gmail, Google Calendar, WhatsApp, Tasks
+ * Activity Dashboard — IMAP email · ICS calendar · WhatsApp Web · Tasks
  * ───────────────────────────────────────────────────────────────────────── */
 
 const Activity = (() => {
-  // ── Local state ────────────────────────────────────────────────────────────
+
+  // ── State ──────────────────────────────────────────────────────────────────
   const S = {
-    tasks:          [],
-    emails:         [],
-    calEvents:      [],
-    waMessages:     [],
-    googleConnected: false,
-    waConfigured:   false,
-    editingTaskId:  null,
-    setupDismissed: false
+    tasks:        [],
+    emails:       [],
+    calEvents:    [],
+    calUrls:      [],
+    waStatus:     'disconnected',
+    waMessages:   [],
+    imapOk:       false,
+    _waPollTimer: null
   };
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Tiny helpers ───────────────────────────────────────────────────────────
 
-  function loading(html = '') {
-    return html || `<div class="act-loading"><div class="act-spinner"></div> Loading…</div>`;
-  }
-
-  function errBox(msg) {
-    return `<div class="act-error">${escHtml(msg)}</div>`;
+  function esc(s) {
+    return String(s ?? '')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   function setEl(id, html) {
@@ -30,153 +29,75 @@ const Activity = (() => {
     if (el) el.innerHTML = html;
   }
 
-  function escHtml(str) {
-    return String(str)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  function spinner() {
+    return `<div class="act-loading"><div class="act-spinner"></div> Loading…</div>`;
   }
 
-  function relTime(isoOrRfc) {
-    if (!isoOrRfc) return '';
-    const d = new Date(isoOrRfc);
-    if (isNaN(d)) return isoOrRfc;
-    const now  = Date.now();
-    const diff = now - d.getTime();
+  function errBox(msg) {
+    return `<div class="act-error">${esc(msg)}</div>`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+  }
+
+  function relTime(val) {
+    if (!val) return '';
+    const d = new Date(val);
+    if (isNaN(d)) return String(val);
+    const diff = Date.now() - d.getTime();
     if (diff < 0) {
-      // future
-      const secs = Math.abs(diff) / 1000;
-      if (secs < 3600) return `in ${Math.round(secs/60)}m`;
-      if (secs < 86400) return `in ${Math.round(secs/3600)}h`;
-      return `in ${Math.round(secs/86400)}d`;
+      const s = Math.abs(diff) / 1000;
+      if (s < 3600)  return `in ${Math.round(s/60)}m`;
+      if (s < 86400) return `in ${Math.round(s/3600)}h`;
+      return `in ${Math.round(s/86400)}d`;
     }
-    const secs = diff / 1000;
-    if (secs < 60)    return 'just now';
-    if (secs < 3600)  return `${Math.round(secs/60)}m ago`;
-    if (secs < 86400) return `${Math.round(secs/3600)}h ago`;
-    if (secs < 86400*7) return `${Math.round(secs/86400)}d ago`;
+    const s = diff / 1000;
+    if (s < 60)     return 'just now';
+    if (s < 3600)   return `${Math.round(s/60)}m ago`;
+    if (s < 86400)  return `${Math.round(s/3600)}h ago`;
+    if (s < 604800) return `${Math.round(s/86400)}d ago`;
     return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
   }
 
-  function fmtEventTime(isoOrDate, allDay) {
-    if (!isoOrDate) return '';
-    if (allDay) {
-      const d = new Date(isoOrDate);
-      return d.toLocaleDateString('en-GB', { weekday:'short', day:'2-digit', month:'short' });
-    }
-    const d = new Date(isoOrDate);
-    return d.toLocaleString('en-GB', { weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-  }
-
-  function isOverdue(dueDate) {
-    if (!dueDate) return false;
-    return new Date(dueDate) < new Date(new Date().toDateString());
+  function isOverdue(due) {
+    if (!due) return false;
+    return new Date(due) < new Date(new Date().toDateString());
   }
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
   async function init() {
-    // Listen for Google auth popup success
-    window.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'google_auth_success') {
-        toast('Google account connected!', 'success');
-        S.googleConnected = true;
-        refresh();
-      }
-    });
-
     await refresh();
   }
 
   async function refresh() {
     await checkStatus();
-    renderSetupBanner();
-    await Promise.all([loadTasks(), loadEmails(), loadCalendar(), loadWhatsapp()]);
-    await loadFeed();
+    await Promise.all([loadTasks(), loadEmails(), loadCalendar(), renderWaPanel()]);
+    loadFeed();
   }
 
   async function checkStatus() {
     try {
-      const status = await api('GET', '/api/activity/status');
-      S.googleConnected = status.google.connected;
-      S.waConfigured    = status.whatsapp.configured;
+      const s = await api('GET', '/api/activity/status');
+      S.imapOk   = s.imap?.configured || false;
+      S.calUrls  = s.calendar?.urls || [];
+      S.waStatus = s.whatsapp?.status || 'disconnected';
     } catch {
-      S.googleConnected = false;
-      S.waConfigured    = false;
-    }
-  }
-
-  function renderSetupBanner() {
-    const banner = document.getElementById('act-setup-banner');
-    if (!banner || S.setupDismissed) return;
-    const needsGoogle = !S.googleConnected;
-    const needsWa     = !S.waConfigured;
-    if (!needsGoogle && !needsWa) {
-      banner.classList.add('hidden');
-      return;
-    }
-    const msgs = [];
-    if (needsGoogle) msgs.push('Connect Google to see Gmail & Calendar');
-    if (needsWa)     msgs.push('Configure Twilio in .env for WhatsApp');
-
-    setEl('act-setup-msg', msgs.join(' · '));
-
-    const googleBtn = document.getElementById('act-google-btn');
-    if (googleBtn) {
-      if (S.googleConnected) {
-        googleBtn.textContent  = '✓ Google Connected';
-        googleBtn.disabled     = true;
-        googleBtn.className    = 'btn btn-ghost btn-sm';
-      } else {
-        googleBtn.textContent  = 'Connect Google';
-        googleBtn.disabled     = false;
-        googleBtn.className    = 'btn btn-primary btn-sm';
-      }
-    }
-    banner.classList.remove('hidden');
-  }
-
-  function dismissSetup() {
-    S.setupDismissed = true;
-    const banner = document.getElementById('act-setup-banner');
-    if (banner) banner.classList.add('hidden');
-  }
-
-  // ── Google connect ─────────────────────────────────────────────────────────
-
-  async function connectGoogle() {
-    try {
-      const data = await api('GET', '/api/activity/auth/google');
-      if (data.url) {
-        window.open(data.url, 'google_oauth', 'width=500,height=650,left=200,top=100');
-      }
-    } catch (err) {
-      toast(`Cannot connect Google: ${err.message}`, 'error');
-    }
-  }
-
-  async function disconnectGoogle() {
-    try {
-      await api('DELETE', '/api/activity/auth/google');
-      S.googleConnected = false;
-      toast('Google account disconnected', 'info');
-      refresh();
-    } catch (err) {
-      toast(`Error: ${err.message}`, 'error');
+      S.imapOk = false;
     }
   }
 
   // ── Tasks ──────────────────────────────────────────────────────────────────
 
   async function loadTasks() {
-    setEl('act-tasks-list', loading());
+    setEl('act-tasks-list', spinner());
     try {
       const filter = document.getElementById('act-task-filter')?.value || '';
-      let url = '/api/activity/tasks';
-      if (filter) url += `?priority=${filter}`;
-      S.tasks = await api('GET', url);
+      S.tasks = await api('GET', `/api/activity/tasks${filter ? `?priority=${filter}` : ''}`);
       renderTasks();
-      const open = S.tasks.filter(t => !t.completed).length;
-      setEl('act-stat-tasks', open);
+      setEl('act-stat-tasks', S.tasks.filter(t => !t.completed).length);
     } catch (err) {
       setEl('act-tasks-list', errBox(err.message));
     }
@@ -187,61 +108,51 @@ const Activity = (() => {
   function renderTasks() {
     const list = document.getElementById('act-tasks-list');
     if (!list) return;
-    if (S.tasks.length === 0) {
-      list.innerHTML = `<div class="act-placeholder"><span>✓</span><p>No tasks yet. Add one above!</p></div>`;
+    if (!S.tasks.length) {
+      list.innerHTML = `<div class="act-placeholder"><span>✓</span><p>No tasks yet — type one above and press Enter.</p></div>`;
       return;
     }
     list.innerHTML = S.tasks.map(t => {
-      const overdue = !t.completed && isOverdue(t.dueDate);
+      const ov = !t.completed && isOverdue(t.dueDate);
       return `
-        <div class="act-task-item ${t.completed ? 'completed' : ''}" id="task-${t.id}">
-          <div class="act-task-check ${t.completed ? 'done' : ''}"
-               onclick="Activity.toggleTask('${t.id}')" title="${t.completed ? 'Mark incomplete' : 'Mark complete'}">
-          </div>
+        <div class="act-task-item${t.completed ? ' completed' : ''}">
+          <div class="act-task-check${t.completed ? ' done' : ''}"
+               onclick="Activity.toggleTask('${t.id}')" title="${t.completed ? 'Mark incomplete' : 'Complete'}"></div>
           <div class="act-task-body">
-            <div class="act-task-title" title="${escHtml(t.title)}">${escHtml(t.title)}</div>
+            <div class="act-task-title">${esc(t.title)}</div>
             <div class="act-task-meta">
               <span class="prio-pill prio-${t.priority}">${t.priority}</span>
               <span class="cat-pill">${t.category}</span>
-              ${t.dueDate ? `<span class="act-task-due ${overdue ? 'overdue' : ''}">
-                ${overdue ? '⚠ Overdue · ' : ''}Due ${fmtDate(t.dueDate)}</span>` : ''}
+              ${t.dueDate
+                ? `<span class="act-task-due${ov ? ' overdue' : ''}">${ov ? '⚠ Overdue · ' : ''}Due ${fmtDate(t.dueDate)}</span>`
+                : ''}
             </div>
           </div>
           <div class="act-task-actions">
             <button class="btn btn-ghost btn-sm" onclick="Activity.openTaskModal('${t.id}')" title="Edit">✎</button>
-            <button class="btn btn-ghost btn-sm" onclick="Activity.deleteTask('${t.id}')" title="Delete">✕</button>
+            <button class="btn btn-ghost btn-sm" onclick="Activity.deleteTask('${t.id}')"    title="Delete">✕</button>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
   }
 
-  function fmtDate(iso) {
-    if (!iso) return '—';
-    return new Date(iso).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
-  }
-
   async function quickAddTask() {
-    const input = document.getElementById('act-quick-task');
-    const title = input?.value?.trim();
+    const el = document.getElementById('act-quick-task');
+    const title = el?.value?.trim();
     if (!title) return;
     try {
       await api('POST', '/api/activity/tasks', { title, priority: 'medium', category: 'general' });
-      input.value = '';
+      el.value = '';
       await loadTasks();
       toast('Task added', 'success');
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   async function toggleTask(id) {
     try {
       await api('PUT', `/api/activity/tasks/${id}/complete`);
       await loadTasks();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   async function deleteTask(id) {
@@ -249,27 +160,22 @@ const Activity = (() => {
       await api('DELETE', `/api/activity/tasks/${id}`);
       await loadTasks();
       toast('Task deleted', 'info');
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+    } catch (err) { toast(err.message, 'error'); }
   }
 
   function openTaskModal(id) {
-    S.editingTaskId = id || null;
     const modal = document.getElementById('task-modal-overlay');
     if (!modal) return;
-
     document.getElementById('task-modal-title').textContent = id ? 'Edit Task' : 'Add Task';
     document.getElementById('task-modal-id').value          = id || '';
-
     if (id) {
-      const task = S.tasks.find(t => t.id === id);
-      if (task) {
-        document.getElementById('tm-task-title').value    = task.title;
-        document.getElementById('tm-task-desc').value     = task.description || '';
-        document.getElementById('tm-task-priority').value = task.priority;
-        document.getElementById('tm-task-category').value = task.category;
-        document.getElementById('tm-task-due').value      = task.dueDate ? task.dueDate.slice(0, 10) : '';
+      const t = S.tasks.find(x => x.id === id);
+      if (t) {
+        document.getElementById('tm-task-title').value    = t.title;
+        document.getElementById('tm-task-desc').value     = t.description || '';
+        document.getElementById('tm-task-priority').value = t.priority;
+        document.getElementById('tm-task-category').value = t.category;
+        document.getElementById('tm-task-due').value      = t.dueDate ? t.dueDate.slice(0,10) : '';
       }
     } else {
       document.getElementById('tm-task-title').value    = '';
@@ -278,7 +184,6 @@ const Activity = (() => {
       document.getElementById('tm-task-category').value = 'general';
       document.getElementById('tm-task-due').value      = '';
     }
-
     modal.classList.remove('hidden');
     document.getElementById('tm-task-title').focus();
   }
@@ -290,123 +195,101 @@ const Activity = (() => {
     const priority = document.getElementById('tm-task-priority').value;
     const category = document.getElementById('tm-task-category').value;
     const dueDate  = document.getElementById('tm-task-due').value;
-
     if (!title) { toast('Title is required', 'error'); return; }
-
-    const body = { title, description: desc, priority, category, dueDate: dueDate || null };
-
     try {
-      if (id) {
-        await api('PUT', `/api/activity/tasks/${id}`, body);
-        toast('Task updated', 'success');
-      } else {
-        await api('POST', '/api/activity/tasks', body);
-        toast('Task created', 'success');
-      }
+      const body = { title, description: desc, priority, category, dueDate: dueDate || null };
+      await api(id ? 'PUT' : 'POST', id ? `/api/activity/tasks/${id}` : '/api/activity/tasks', body);
       App.closeModal('task-modal-overlay');
       await loadTasks();
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+      toast(id ? 'Task updated' : 'Task created', 'success');
+    } catch (err) { toast(err.message, 'error'); }
   }
 
-  // ── Gmail ──────────────────────────────────────────────────────────────────
+  // ── Email (IMAP) ───────────────────────────────────────────────────────────
 
   async function loadEmails() {
-    if (!S.googleConnected) {
-      showEmailPlaceholder(true);
+    if (!S.imapOk) {
+      setEl('act-email-list', `
+        <div class="act-placeholder">
+          <span>&#9993;</span>
+          <p>Add <code>EMAIL_USER</code> and <code>EMAIL_APP_PASSWORD</code> to your <code>.env</code> to read your inbox.</p>
+          <p class="hint" style="margin-top:4px">For Gmail: enable 2FA then create an App Password at myaccount.google.com/apppasswords</p>
+        </div>`);
+      setEl('act-stat-unread', '—');
       return;
     }
-    showEmailPlaceholder(false);
-    setEl('act-email-list', loading());
+    setEl('act-email-list', spinner());
     try {
-      const data = await api('GET', '/api/activity/emails?limit=20');
-      S.emails = data.messages || [];
-      const unread = data.unread || 0;
-
-      const badge = document.getElementById('act-email-unread-badge');
-      if (badge) badge.textContent = unread > 0 ? unread : '';
-
+      const data     = await api('GET', '/api/activity/emails?limit=20');
+      S.emails       = data.messages || [];
+      const unread   = data.unread   || 0;
       setEl('act-stat-unread', unread);
+      const badge = document.getElementById('act-email-unread-badge');
+      if (badge) {
+        badge.textContent    = unread > 0 ? unread : '';
+        badge.style.display  = unread > 0 ? '' : 'none';
+      }
       renderEmails();
     } catch (err) {
       setEl('act-email-list', errBox(err.message));
     }
   }
 
-  function showEmailPlaceholder(show) {
-    const ph = document.getElementById('act-email-placeholder');
-    const list = document.getElementById('act-email-list');
-    if (!ph || !list) return;
-    if (show) {
-      list.innerHTML = ph.outerHTML.replace('hidden', '');
-    } else {
-      if (ph) ph.style.display = 'none';
-    }
-  }
-
   function renderEmails() {
     const list = document.getElementById('act-email-list');
     if (!list) return;
-    if (S.emails.length === 0) {
-      list.innerHTML = `<div class="act-placeholder"><span>&#9993;</span><p>Your inbox is empty.</p></div>`;
+    if (!S.emails.length) {
+      list.innerHTML = `<div class="act-placeholder"><span>&#9993;</span><p>Inbox is empty.</p></div>`;
       return;
     }
     list.innerHTML = S.emails.map(e => `
-      <div class="act-email-item ${e.isUnread ? 'unread' : ''}">
+      <div class="act-email-item${e.isUnread ? ' unread' : ''}">
         <div class="act-email-dot"></div>
         <div class="act-email-body">
-          <div class="act-email-subject" title="${escHtml(e.subject)}">${escHtml(e.subject)}</div>
-          <div class="act-email-from">${escHtml(e.from)}</div>
-          <div class="act-email-snippet">${escHtml(e.snippet)}</div>
+          <div class="act-email-subject">${esc(e.subject)}</div>
+          <div class="act-email-from">${esc(e.from)}</div>
         </div>
         <span style="font-size:10px;color:var(--text-muted);flex-shrink:0;margin-top:2px">${relTime(e.date)}</span>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
-  // ── Calendar ───────────────────────────────────────────────────────────────
+  // ── Calendar (ICS feeds) ───────────────────────────────────────────────────
 
   async function loadCalendar() {
-    if (!S.googleConnected) {
-      showCalPlaceholder(true);
+    const urls = S.calUrls;
+    if (!urls.length) {
+      setEl('act-cal-list', `
+        <div class="act-placeholder">
+          <span>&#128197;</span>
+          <p>Click <strong>+ Cal</strong> to add a calendar ICS feed URL.</p>
+        </div>`);
       setEl('act-stat-events', '—');
       return;
     }
-    showCalPlaceholder(false);
-    setEl('act-cal-list', loading());
+    setEl('act-cal-list', spinner());
     try {
       const days = document.getElementById('act-cal-days')?.value || 7;
       const data = await api('GET', `/api/activity/calendar?days=${days}`);
       S.calEvents = data.events || [];
-      setEl('act-stat-events', data.todayCount);
+      setEl('act-stat-events', data.todayCount ?? '—');
       renderCalendar();
     } catch (err) {
       setEl('act-cal-list', errBox(err.message));
     }
   }
 
-  function showCalPlaceholder(show) {
-    const ph = document.getElementById('act-cal-placeholder');
-    const list = document.getElementById('act-cal-list');
-    if (!ph || !list) return;
-    if (show) {
-      list.innerHTML = ph.outerHTML.replace('hidden', '');
-    }
-  }
-
   function renderCalendar() {
     const list = document.getElementById('act-cal-list');
     if (!list) return;
-    if (S.calEvents.length === 0) {
-      list.innerHTML = `<div class="act-placeholder"><span>&#128197;</span><p>No upcoming events.</p></div>`;
+    if (!S.calEvents.length) {
+      list.innerHTML = `<div class="act-placeholder"><span>&#128197;</span><p>No upcoming events in this range.</p></div>`;
       return;
     }
     list.innerHTML = S.calEvents.map(ev => {
-      const d = new Date(ev.start);
+      const d   = new Date(ev.start);
       const day = isNaN(d) ? '' : d.getDate();
-      const mon = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { month: 'short' });
-      const timeStr = ev.allDay ? 'All day' : fmtEventTime(ev.start, false);
+      const mon = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { month:'short' });
+      const time = ev.allDay ? 'All day' : d.toLocaleString('en-GB', { weekday:'short', hour:'2-digit', minute:'2-digit' });
       return `
         <div class="act-cal-item">
           <div class="act-cal-date">
@@ -414,84 +297,192 @@ const Activity = (() => {
             <div class="act-cal-mon">${mon}</div>
           </div>
           <div class="act-cal-body">
-            <div class="act-cal-title" title="${escHtml(ev.title)}">${escHtml(ev.title)}</div>
-            <div class="act-cal-time">${escHtml(timeStr)}</div>
-            ${ev.location ? `<div class="act-cal-loc">&#128205; ${escHtml(ev.location)}</div>` : ''}
-            ${ev.meetLink ? `<a class="act-cal-meet" href="${escHtml(ev.meetLink)}" target="_blank" rel="noopener">&#128249; Join meeting</a>` : ''}
+            <div class="act-cal-title">${esc(ev.title)}</div>
+            <div class="act-cal-time">${esc(time)}${ev.calendarLabel ? ` · <em>${esc(ev.calendarLabel)}</em>` : ''}</div>
+            ${ev.location ? `<div class="act-cal-loc">&#128205; ${esc(ev.location)}</div>` : ''}
+            ${ev.meetLink ? `<a class="act-cal-meet" href="${esc(ev.meetLink)}" target="_blank" rel="noopener">&#128249; Join meeting</a>` : ''}
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
   }
 
-  function fmtEventTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    return d.toLocaleString('en-GB', { weekday:'short', hour:'2-digit', minute:'2-digit' });
+  function openAddCalModal() {
+    document.getElementById('cal-add-label').value = '';
+    document.getElementById('cal-add-url').value   = '';
+    document.getElementById('add-cal-modal-overlay').classList.remove('hidden');
+    document.getElementById('cal-add-label').focus();
   }
 
-  // ── WhatsApp ───────────────────────────────────────────────────────────────
+  async function addCalendarUrl() {
+    const label = document.getElementById('cal-add-label').value.trim();
+    const url   = document.getElementById('cal-add-url').value.trim();
+    if (!url) { toast('URL is required', 'error'); return; }
+    try {
+      await api('POST', '/api/activity/calendar/urls', { label, url });
+      App.closeModal('add-cal-modal-overlay');
+      toast('Calendar added!', 'success');
+      await checkStatus();   // refresh S.calUrls
+      await loadCalendar();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function removeCalendarUrl(index) {
+    try {
+      await api('DELETE', `/api/activity/calendar/urls/${index}`);
+      await checkStatus();
+      await loadCalendar();
+      toast('Calendar removed', 'info');
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  // ── WhatsApp (whatsapp-web.js) ─────────────────────────────────────────────
+
+  async function renderWaPanel() {
+    const actionsEl = document.getElementById('act-wa-panel-actions');
+    const listEl    = document.getElementById('act-wa-list');
+    if (!actionsEl || !listEl) return;
+
+    const { status } = await api('GET', '/api/activity/whatsapp/status').catch(() => ({ status: 'disconnected' }));
+    S.waStatus = status;
+
+    // Build action buttons
+    if (status === 'ready') {
+      actionsEl.innerHTML = `
+        <button class="btn btn-ghost btn-sm" onclick="Activity.openWaSendModal()">Send</button>
+        <button class="btn btn-ghost btn-sm" onclick="Activity.loadWhatsapp()">Refresh</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="Activity.disconnectWhatsapp()">Disconnect</button>`;
+    } else if (status === 'initializing' || status === 'connecting' || status === 'qr_ready') {
+      actionsEl.innerHTML = `<button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="Activity.disconnectWhatsapp()">Cancel</button>`;
+    } else {
+      actionsEl.innerHTML = `<button class="btn btn-primary btn-sm" onclick="Activity.initWhatsapp()">Connect</button>`;
+    }
+
+    // Build panel body
+    if (status === 'ready') {
+      await loadWhatsapp();
+    } else if (status === 'qr_ready') {
+      await showQrCode();
+    } else if (status === 'initializing' || status === 'connecting') {
+      listEl.innerHTML = `
+        <div class="act-placeholder">
+          <div class="act-spinner" style="width:24px;height:24px;border-width:3px;margin-bottom:8px"></div>
+          <p>Starting WhatsApp Web… this may take 10–20 seconds.</p>
+        </div>`;
+      startWaPoll();
+    } else if (status === 'error') {
+      const { error } = await api('GET', '/api/activity/whatsapp/status').catch(() => ({}));
+      listEl.innerHTML = errBox(error || 'WhatsApp encountered an error. Try reconnecting.');
+    } else {
+      listEl.innerHTML = `
+        <div class="act-placeholder">
+          <span>&#128172;</span>
+          <p>Click <strong>Connect</strong> to link WhatsApp by scanning a QR code — no API keys needed.</p>
+          <button class="btn btn-primary btn-sm" onclick="Activity.initWhatsapp()">Connect WhatsApp</button>
+        </div>`;
+    }
+  }
+
+  async function initWhatsapp() {
+    try {
+      await api('POST', '/api/activity/whatsapp/init');
+      await renderWaPanel();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function disconnectWhatsapp() {
+    stopWaPoll();
+    try {
+      await api('POST', '/api/activity/whatsapp/disconnect');
+      await renderWaPanel();
+      toast('WhatsApp disconnected', 'info');
+    } catch (err) { toast(err.message, 'error'); }
+  }
+
+  async function showQrCode() {
+    const listEl = document.getElementById('act-wa-list');
+    if (!listEl) return;
+    try {
+      const { qr } = await api('GET', '/api/activity/whatsapp/qr');
+      listEl.innerHTML = `
+        <div class="act-qr-wrap">
+          <p class="act-qr-hint">Open WhatsApp on your phone → Menu → Linked Devices → Link a Device</p>
+          <img src="${esc(qr)}" class="act-qr-img" alt="WhatsApp QR code" />
+          <p class="act-qr-sub">QR code refreshes automatically</p>
+        </div>`;
+      startWaPoll();
+    } catch {
+      listEl.innerHTML = `
+        <div class="act-placeholder">
+          <div class="act-spinner" style="width:24px;height:24px;border-width:3px;margin-bottom:8px"></div>
+          <p>Generating QR code…</p>
+        </div>`;
+      startWaPoll();
+    }
+  }
+
+  function startWaPoll() {
+    stopWaPoll();
+    S._waPollTimer = setInterval(async () => {
+      try {
+        const { status } = await api('GET', '/api/activity/whatsapp/status');
+        if (status !== S.waStatus) {
+          S.waStatus = status;
+          stopWaPoll();
+          await renderWaPanel();
+          if (status === 'ready') {
+            toast('WhatsApp connected!', 'success');
+            setEl('act-stat-wa', '✓');
+          }
+        } else if (status === 'qr_ready') {
+          await showQrCode(); // refresh QR image in case it rotated
+        }
+      } catch { /* ignore transient errors */ }
+    }, 3000);
+  }
+
+  function stopWaPoll() {
+    if (S._waPollTimer) { clearInterval(S._waPollTimer); S._waPollTimer = null; }
+  }
 
   async function loadWhatsapp() {
-    if (!S.waConfigured) {
-      showWaPlaceholder(true);
-      setEl('act-stat-wa', '—');
-      return;
-    }
-    showWaPlaceholder(false);
-    setEl('act-wa-list', loading());
+    const listEl = document.getElementById('act-wa-list');
+    if (!listEl) return;
+    listEl.innerHTML = spinner();
     try {
       const data = await api('GET', '/api/activity/whatsapp?limit=20');
-      const all  = [...(data.incoming || []), ...(data.messages || [])];
-      // Sort by date descending
-      all.sort((a, b) => new Date(b.dateSent || b.receivedAt || 0) - new Date(a.dateSent || a.receivedAt || 0));
-      S.waMessages = all;
-      setEl('act-stat-wa', all.length);
+      S.waMessages = data.messages || [];
+      setEl('act-stat-wa', S.waMessages.length);
       renderWhatsapp();
     } catch (err) {
-      setEl('act-wa-list', errBox(err.message));
-    }
-  }
-
-  function showWaPlaceholder(show) {
-    const ph = document.getElementById('act-wa-placeholder');
-    const list = document.getElementById('act-wa-list');
-    if (!ph || !list) return;
-    if (show) {
-      list.innerHTML = ph.outerHTML.replace('hidden', '');
+      listEl.innerHTML = errBox(err.message);
     }
   }
 
   function renderWhatsapp() {
-    const list = document.getElementById('act-wa-list');
-    if (!list) return;
-    if (S.waMessages.length === 0) {
-      list.innerHTML = `<div class="act-placeholder"><span>&#128172;</span><p>No WhatsApp messages yet.</p></div>`;
+    const listEl = document.getElementById('act-wa-list');
+    if (!listEl) return;
+    if (!S.waMessages.length) {
+      listEl.innerHTML = `<div class="act-placeholder"><span>&#128172;</span><p>No messages yet.</p></div>`;
       return;
     }
-    list.innerHTML = S.waMessages.map(m => {
-      const dir       = m.direction === 'inbound' ? 'inbound' : 'outbound';
-      const dirLabel  = dir === 'inbound' ? '&#8592; Received' : '&#8594; Sent';
-      const contact   = dir === 'inbound' ? m.from : m.to;
-      const timeStr   = relTime(m.dateSent || m.receivedAt || m.dateCreated);
+    listEl.innerHTML = S.waMessages.map(m => {
+      const dir      = m.direction === 'inbound' ? 'inbound' : 'outbound';
+      const contact  = dir === 'inbound' ? (m.fromName || m.from) : m.to;
+      const dirLabel = dir === 'inbound' ? '&#8592; received' : '&#8594; sent';
       return `
         <div class="act-wa-item ${dir}">
           <div class="act-wa-header">
-            <span class="act-wa-from">${escHtml(contact || '—')}</span>
+            <span class="act-wa-from">${esc(contact)}</span>
             <span class="act-wa-dir">${dirLabel}</span>
           </div>
-          <div class="act-wa-body">${escHtml(m.body || '')}</div>
-          <div class="act-wa-time">${timeStr}</div>
-        </div>
-      `;
+          <div class="act-wa-body">${esc(m.body)}</div>
+          <div class="act-wa-time">${relTime(m.timestamp)}</div>
+        </div>`;
     }).join('');
   }
 
   function openWaSendModal() {
-    if (!S.waConfigured) {
-      toast('WhatsApp is not configured. Add Twilio credentials to .env', 'error');
-      return;
-    }
+    if (S.waStatus !== 'ready') { toast('WhatsApp is not connected', 'error'); return; }
     document.getElementById('wa-send-to').value   = '';
     document.getElementById('wa-send-body').value = '';
     document.getElementById('wa-send-modal-overlay').classList.remove('hidden');
@@ -505,17 +496,15 @@ const Activity = (() => {
     try {
       await api('POST', '/api/activity/whatsapp/send', { to, body });
       App.closeModal('wa-send-modal-overlay');
-      toast('WhatsApp message sent!', 'success');
+      toast('Message sent!', 'success');
       await loadWhatsapp();
-    } catch (err) {
-      toast(`Send failed: ${err.message}`, 'error');
-    }
+    } catch (err) { toast(`Send failed: ${err.message}`, 'error'); }
   }
 
   // ── Activity Feed ──────────────────────────────────────────────────────────
 
   async function loadFeed() {
-    setEl('act-feed-list', loading());
+    setEl('act-feed-list', spinner());
     try {
       const items = await api('GET', '/api/activity/feed');
       renderFeed(items);
@@ -527,50 +516,42 @@ const Activity = (() => {
   function renderFeed(items) {
     const list = document.getElementById('act-feed-list');
     if (!list) return;
-    if (!items || items.length === 0) {
-      list.innerHTML = `<div class="act-placeholder" style="max-height:120px">
-        <p>Your activity feed will appear here once you have tasks, emails, calendar events, or WhatsApp messages.</p>
-      </div>`;
+    if (!items?.length) {
+      list.innerHTML = `
+        <div class="act-placeholder" style="padding:20px">
+          <p>Your activity feed will appear here as you add tasks, emails arrive, calendar events approach, and WhatsApp messages come in.</p>
+        </div>`;
       return;
     }
-
-    const typeIcons = { task: '✓', email: '✉', calendar: '📅', whatsapp: '💬' };
-    const typeLabels = { task: 'Task', email: 'Email', calendar: 'Event', whatsapp: 'WhatsApp' };
-
+    const icons  = { task:'✓', email:'✉', calendar:'📅', whatsapp:'💬' };
+    const labels = { task:'Task', email:'Email', calendar:'Event', whatsapp:'WhatsApp' };
     list.innerHTML = items.map(item => `
-      <div class="act-feed-item act-feed-type-${item.type}">
-        <div class="act-feed-icon">${typeIcons[item.type] || '•'}</div>
+      <div class="act-feed-item act-feed-type-${esc(item.type)}">
+        <div class="act-feed-icon">${icons[item.type] || '•'}</div>
         <div class="act-feed-body">
-          <div class="act-feed-title">${escHtml(item.title || '')}</div>
-          ${item.subtitle ? `<div class="act-feed-sub">${escHtml(item.subtitle)}</div>` : ''}
-          <div class="act-feed-sub" style="margin-top:2px">
-            <span class="cat-pill">${typeLabels[item.type] || item.type}</span>
-            ${item.priority ? `<span class="prio-pill prio-${item.priority}" style="margin-left:4px">${item.priority}</span>` : ''}
+          <div class="act-feed-title">${esc(item.title || '')}</div>
+          ${item.subtitle ? `<div class="act-feed-sub">${esc(item.subtitle)}</div>` : ''}
+          <div class="act-feed-sub" style="margin-top:3px">
+            <span class="cat-pill">${labels[item.type] || item.type}</span>
+            ${item.priority ? `<span class="prio-pill prio-${esc(item.priority)}" style="margin-left:4px">${item.priority}</span>` : ''}
           </div>
         </div>
         <div class="act-feed-time">${relTime(item.time)}</div>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
   return {
-    init,
-    refresh,
-    filterTasks,
-    quickAddTask,
-    toggleTask,
-    deleteTask,
-    openTaskModal,
-    saveTask,
+    init, refresh,
+    // tasks
+    filterTasks, quickAddTask, toggleTask, deleteTask, openTaskModal, saveTask,
+    // email
     loadEmails,
-    loadCalendar,
-    loadWhatsapp,
-    loadFeed,
-    connectGoogle,
-    disconnectGoogle,
-    dismissSetup,
-    openWaSendModal,
-    sendWhatsapp
+    // calendar
+    loadCalendar, openAddCalModal, addCalendarUrl, removeCalendarUrl,
+    // whatsapp
+    initWhatsapp, disconnectWhatsapp, loadWhatsapp, openWaSendModal, sendWhatsapp,
+    // feed
+    loadFeed
   };
 })();

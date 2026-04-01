@@ -217,41 +217,26 @@
       <div class="view-header">
         <h1>Activity Dashboard</h1>
         <div class="header-actions">
-          <button class="btn btn-secondary" onclick="Activity.refresh()">Refresh</button>
+          <button class="btn btn-secondary" onclick="Activity.refresh()">Refresh All</button>
           <button class="btn btn-primary"   onclick="Activity.openTaskModal()">+ Add Task</button>
         </div>
       </div>
 
-      <!-- Integration setup banner -->
-      <div id="act-setup-banner" class="act-setup-banner hidden">
-        <div class="act-setup-inner">
-          <span class="act-setup-icon">&#128279;</span>
-          <div>
-            <strong>Connect your accounts</strong>
-            <p id="act-setup-msg">Link Google (Gmail + Calendar) and configure Twilio WhatsApp to unlock all panels.</p>
-          </div>
-          <div class="act-setup-actions">
-            <button class="btn btn-primary btn-sm" id="act-google-btn" onclick="Activity.connectGoogle()">Connect Google</button>
-            <button class="btn btn-ghost btn-sm"   onclick="Activity.dismissSetup()">Dismiss</button>
-          </div>
-        </div>
-      </div>
-
       <!-- Stats row -->
-      <div class="stat-grid act-stat-grid" id="act-stat-grid">
-        <div class="stat-card act-stat">
+      <div class="stat-grid act-stat-grid">
+        <div class="stat-card">
           <div class="stat-value" id="act-stat-tasks">—</div>
           <div class="stat-label">Open Tasks</div>
         </div>
-        <div class="stat-card act-stat">
+        <div class="stat-card">
           <div class="stat-value" id="act-stat-unread">—</div>
           <div class="stat-label">Unread Emails</div>
         </div>
-        <div class="stat-card act-stat">
+        <div class="stat-card">
           <div class="stat-value" id="act-stat-events">—</div>
           <div class="stat-label">Today's Events</div>
         </div>
-        <div class="stat-card act-stat">
+        <div class="stat-card">
           <div class="stat-value" id="act-stat-wa">—</div>
           <div class="stat-label">WA Messages</div>
         </div>
@@ -260,7 +245,7 @@
       <!-- Main 4-panel grid -->
       <div class="act-grid">
 
-        <!-- Tasks panel -->
+        <!-- ── Tasks panel ── -->
         <div class="panel act-panel" id="act-tasks-panel">
           <div class="act-panel-header">
             <h2 class="panel-title">Tasks</h2>
@@ -268,38 +253,40 @@
               <select id="act-task-filter" class="act-filter-sel" onchange="Activity.filterTasks()">
                 <option value="">All</option>
                 <option value="high">High priority</option>
-                <option value="medium">Medium priority</option>
-                <option value="low">Low priority</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
               </select>
             </div>
           </div>
-          <!-- Quick-add row -->
           <div class="act-quick-add">
             <input type="text" id="act-quick-task" class="form-input act-quick-input"
-                   placeholder="Quick add task…" onkeydown="if(event.key==='Enter') Activity.quickAddTask()" />
+                   placeholder="Quick add task… (Enter to save)"
+                   onkeydown="if(event.key==='Enter') Activity.quickAddTask()" />
             <button class="btn btn-primary btn-sm" onclick="Activity.quickAddTask()">Add</button>
           </div>
           <div id="act-tasks-list" class="act-scroll-list"></div>
         </div>
 
-        <!-- Gmail panel -->
+        <!-- ── Email / IMAP panel ── -->
         <div class="panel act-panel" id="act-email-panel">
           <div class="act-panel-header">
-            <h2 class="panel-title">Inbox <span class="act-badge-inline" id="act-email-unread-badge"></span></h2>
+            <h2 class="panel-title">
+              Inbox
+              <span class="act-badge-inline" id="act-email-unread-badge" style="display:none"></span>
+            </h2>
             <div class="act-panel-actions">
               <button class="btn btn-ghost btn-sm" onclick="Activity.loadEmails()">Refresh</button>
             </div>
           </div>
           <div id="act-email-list" class="act-scroll-list">
-            <div class="act-placeholder" id="act-email-placeholder">
+            <div class="act-placeholder">
               <span>&#9993;</span>
-              <p>Connect your Google account to see Gmail inbox</p>
-              <button class="btn btn-primary btn-sm" onclick="Activity.connectGoogle()">Connect Google</button>
+              <p>Add <code>EMAIL_USER</code> and <code>EMAIL_APP_PASSWORD</code> to your <code>.env</code> to read your inbox via IMAP.</p>
             </div>
           </div>
         </div>
 
-        <!-- Calendar panel -->
+        <!-- ── Calendar / ICS panel ── -->
         <div class="panel act-panel" id="act-cal-panel">
           <div class="act-panel-header">
             <h2 class="panel-title">Calendar</h2>
@@ -310,30 +297,30 @@
                 <option value="14">Next 14 days</option>
                 <option value="30">Next 30 days</option>
               </select>
+              <button class="btn btn-ghost btn-sm" onclick="Activity.openAddCalModal()">+ Cal</button>
             </div>
           </div>
           <div id="act-cal-list" class="act-scroll-list">
-            <div class="act-placeholder" id="act-cal-placeholder">
+            <div class="act-placeholder">
               <span>&#128197;</span>
-              <p>Connect your Google account to see calendar events</p>
-              <button class="btn btn-primary btn-sm" onclick="Activity.connectGoogle()">Connect Google</button>
+              <p>Click <strong>+ Cal</strong> to add an ICS feed URL from Google Calendar, Outlook, Apple Calendar, or any provider.</p>
             </div>
           </div>
         </div>
 
-        <!-- WhatsApp panel -->
+        <!-- ── WhatsApp panel ── -->
         <div class="panel act-panel" id="act-wa-panel">
           <div class="act-panel-header">
             <h2 class="panel-title">WhatsApp</h2>
-            <div class="act-panel-actions">
-              <button class="btn btn-ghost btn-sm" onclick="Activity.openWaSendModal()">Send</button>
-              <button class="btn btn-ghost btn-sm" onclick="Activity.loadWhatsapp()">Refresh</button>
+            <div class="act-panel-actions" id="act-wa-panel-actions">
+              <!-- populated by JS depending on connection status -->
             </div>
           </div>
           <div id="act-wa-list" class="act-scroll-list">
-            <div class="act-placeholder" id="act-wa-placeholder">
+            <div class="act-placeholder">
               <span>&#128172;</span>
-              <p>Configure Twilio WhatsApp in your <code>.env</code> to see messages</p>
+              <p>Click <strong>Connect</strong> to link WhatsApp by scanning a QR code with your phone. No API keys needed.</p>
+              <button class="btn btn-primary btn-sm" onclick="Activity.initWhatsapp()">Connect WhatsApp</button>
             </div>
           </div>
         </div>
@@ -513,6 +500,32 @@
       <div class="modal-footer">
         <button class="btn btn-ghost"    onclick="App.closeModal('wa-send-modal-overlay')">Cancel</button>
         <button class="btn btn-success"  onclick="Activity.sendWhatsapp()">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add calendar URL modal ──────────────────────────────────────────── -->
+  <div class="modal-overlay hidden" id="add-cal-modal-overlay" onclick="App.closeModal('add-cal-modal-overlay')">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Add Calendar Feed</h2>
+        <button class="modal-close" onclick="App.closeModal('add-cal-modal-overlay')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">Label</label>
+        <input type="text" id="cal-add-label" class="form-input" placeholder="e.g. Work Calendar" />
+        <label class="form-label">ICS / iCal URL <span class="req">*</span></label>
+        <input type="url" id="cal-add-url" class="form-input" placeholder="https://calendar.google.com/calendar/ical/…" />
+        <div class="hint" style="margin-top:12px">
+          <strong>Where to find your ICS URL:</strong><br>
+          <strong>Google Calendar:</strong> Settings → choose calendar → "Secret address in iCal format"<br>
+          <strong>Outlook:</strong> Calendar → Share → "View only (ICS link)"<br>
+          <strong>Apple Calendar:</strong> Right-click calendar → Share → copy the webcal:// link (change webcal:// to https://)
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost"   onclick="App.closeModal('add-cal-modal-overlay')">Cancel</button>
+        <button class="btn btn-primary" onclick="Activity.addCalendarUrl()">Add Calendar</button>
       </div>
     </div>
   </div>

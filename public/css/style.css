@@ -872,6 +872,33 @@ code    { background: var(--surface2); padding: 1px 5px; border-radius: 4px; fon
 .act-feed-type-calendar  .act-feed-icon { color: var(--warn); }
 .act-feed-type-whatsapp  .act-feed-icon { color: var(--success); }
 
+/* ── WhatsApp QR code ─────────────────────────────────────────────────────── */
+.act-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+.act-qr-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 260px;
+  line-height: 1.5;
+}
+.act-qr-img {
+  width: 200px;
+  height: 200px;
+  border: 3px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.act-qr-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* Loading spinner */
 .act-loading {
   display: flex;
